@@ -12,8 +12,10 @@
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { spawn } = require("node:child_process");
 const {
+  controlPlaneMode,
   createControlPlaneChild,
   engineRuntimeEnvironment,
+  serverPathForWorkspace,
 } = require("./control-plane-launch.cjs");
 const fs = require("node:fs");
 const http = require("node:http");
@@ -211,11 +213,26 @@ function defaultWorkspaceDir() {
 
 async function openDefaultWorkspace() {
   const dir = defaultWorkspaceDir();
-  if (!fs.existsSync(path.join(dir, "workspace.json"))) return;
+  if (!fs.existsSync(path.join(dir, "workspace.json"))) {
+    process.stderr.write(`auto-open skipped: workspace.json not found at ${dir}\n`);
+    return;
+  }
   try {
-    await apiRequest("/workspace/open", { method: "POST", body: { path: dir } });
-  } catch {
-    // Auto-open is best-effort; the empty state with the open button remains the fallback.
+    const res = await apiRequest("/workspace/open", {
+      method: "POST",
+      body: { path: serverPathForWorkspace(dir, process.env) },
+    });
+    if (res.status !== 200) {
+      process.stderr.write(
+        `auto-open workspace failed [mode=${controlPlaneMode(process.env)}, dir=${dir}]: `
+        + `server responded ${res.status} — ${JSON.stringify(res.body)}\n`,
+      );
+    }
+  } catch (err) {
+    process.stderr.write(
+      `auto-open workspace failed [mode=${controlPlaneMode(process.env)}, dir=${dir}]: `
+      + `${err.message ?? err}\n`,
+    );
   }
 }
 
@@ -309,7 +326,7 @@ ipcMain.handle("owb:workspace:open", async () => {
     : await dialog.showOpenDialog(options);
   if (picked.canceled || picked.filePaths.length === 0) return { canceled: true };
   const dir = picked.filePaths[0];
-  const res = await apiRequest("/workspace/open", { method: "POST", body: { path: dir } });
+  const res = await apiRequest("/workspace/open", { method: "POST", body: { path: serverPathForWorkspace(dir, process.env) } });
   return res;
 });
 
