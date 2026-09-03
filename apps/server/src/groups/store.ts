@@ -39,8 +39,13 @@ const MAX_GROUP_RECORD_BYTES = 16 * 1024;
 const MAX_GROUP_MESSAGE_BYTES = 260 * 1024;
 const REF_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-function storageError(message: string): OrgApiError {
-  return new OrgApiError(errorCodes.group_storage_failed, 500, message);
+function storageError(message: string, cause?: string): OrgApiError {
+  return new OrgApiError(errorCodes.group_storage_failed, 500, message, false, cause);
+}
+
+function errnoCode(error: unknown): string | undefined {
+  const code = (error as NodeJS.ErrnoException)?.code;
+  return typeof code === "string" ? code : undefined;
 }
 
 export function assertConversationRef(value: unknown): string {
@@ -185,8 +190,7 @@ export class GroupStore {
         storageError,
       );
     } catch (error) {
-      if (error instanceof OrgApiError) throw error;
-      throw storageError("local group record could not be persisted atomically");
+      throw storageError("local group record could not be persisted atomically", errnoCode(error));
     }
     return group;
   }
@@ -268,8 +272,7 @@ export class GroupStore {
         storageError,
       );
     } catch (error) {
-      if (error instanceof OrgApiError) throw error;
-      throw storageError("local group record could not be persisted atomically");
+      throw storageError("local group record could not be persisted atomically", errnoCode(error));
     }
     return updated;
   }
@@ -292,8 +295,7 @@ export class GroupStore {
         storageError,
       );
     } catch (error) {
-      if (error instanceof OrgApiError) throw error;
-      throw storageError("local group message could not be persisted atomically");
+      throw storageError("local group message could not be persisted atomically", errnoCode(error));
     }
     return record;
   }

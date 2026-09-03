@@ -50,8 +50,13 @@ export interface RotateResult {
   created: boolean;
 }
 
-function sessionError(message: string): OrgApiError {
-  return new OrgApiError(errorCodes.session_storage_failed, 500, message);
+function sessionError(message: string, cause?: string): OrgApiError {
+  return new OrgApiError(errorCodes.session_storage_failed, 500, message, false, cause);
+}
+
+function errnoCode(error: unknown): string | undefined {
+  const code = (error as NodeJS.ErrnoException)?.code;
+  return typeof code === "string" ? code : undefined;
 }
 
 function sessionMissing(): OrgApiError {
@@ -448,8 +453,7 @@ export class SessionStore {
     try {
       await atomicWriteJson(positionFile(workspace, positionId), state, MAX_POSITION_RECORD_BYTES, nodeAtomicTurnWriteOperations, sessionError);
     } catch (error) {
-      if (error instanceof OrgApiError) throw error;
-      throw sessionError("local session record could not be persisted atomically");
+      throw sessionError("local session record could not be persisted atomically", errnoCode(error));
     }
     return session;
   }
@@ -528,8 +532,7 @@ export class SessionStore {
       try {
         await atomicWriteJson(positionFile(workspace, source.positionId), state, MAX_POSITION_RECORD_BYTES, nodeAtomicTurnWriteOperations, sessionError);
       } catch (error) {
-        if (error instanceof OrgApiError) throw error;
-        throw sessionError("local session record could not be persisted atomically");
+        throw sessionError("local session record could not be persisted atomically", errnoCode(error));
       }
       return { session: successor, created: true };
     });
@@ -578,8 +581,7 @@ export class SessionStore {
       try {
         await atomicWriteJson(file, record, MAX_WORKSPACE_RECORD_BYTES, nodeAtomicTurnWriteOperations, sessionError);
       } catch (error) {
-        if (error instanceof OrgApiError) throw error;
-        throw sessionError("local session workspace identity could not be persisted atomically");
+        throw sessionError("local session workspace identity could not be persisted atomically", errnoCode(error));
       }
       return record;
     });

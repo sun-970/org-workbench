@@ -1,9 +1,9 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { isPositionId } from "@org-workbench/shared";
+import { OrgApiError, errorCodes, isPositionId } from "@org-workbench/shared";
 import type { TurnRecord, WorkbenchSession } from "@org-workbench/shared";
-import { isTurnRecord } from "../turns/store.js";
+import { isTurnRecord, atomicWriteJson, nodeAtomicTurnWriteOperations } from "../turns/store.js";
 
 const EXPORT_SCHEMA_VERSION = "context-export-state.v1" as const;
 const OCCURRENCE_SCHEMA_VERSION = "context-occurrence.v1" as const;
@@ -71,10 +71,17 @@ export interface ContextExportState {
 }
 
 class ContextExportError extends Error {
-  constructor(message: string) {
+  readonly cause?: string;
+  constructor(message: string, cause?: string) {
     super(message);
     this.name = "ContextExportError";
+    this.cause = cause;
   }
+}
+
+function errnoCode(error: unknown): string | undefined {
+  const code = (error as NodeJS.ErrnoException)?.code;
+  return typeof code === "string" ? code : undefined;
 }
 
 interface PreparedExport {
@@ -394,40 +401,14 @@ async function writeContextExportState(workspace: string, state: ContextExportSt
   if (!isContextExportState(state)) throw new ContextExportError("context export state is invalid");
   await prepareExportDirectories(workspace, state.sessionId);
   const file = exportStateFile(workspace, state.sessionId, state.turnId);
-  const payload = `${JSON.stringify(state)}\n`;
-  if (Buffer.byteLength(payload, "utf8") > MAX_EXPORT_STATE_BYTES) {
-    throw new ContextExportError("context export state exceeds its bound");
-  }
-  const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${crypto.randomUUID()}.tmp`);
-  let handle: fs.FileHandle | undefined;
   try {
-    handle = await fs.open(temporary, "wx", 0o600);
-    await handle.writeFile(payload, "utf8");
-    await handle.sync();
-    await handle.close();
-    handle = undefined;
-    await fs.rename(temporary, file);
-    await fs.chmod(file, 0o600);
-    const directory = await fs.open(path.dirname(file), "r");
-    try {
-      try {
-        await directory.sync();
-      } catch (syncError) {
-        // Windows/NTFS rejects fsync on directory handles with EPERM. The
-        // rename above has already committed the data atomically, so on the
-        // affected platform the record is durable. On POSIX the same EPERM
-        // would indicate a real failure and must propagate.
-        if (process.platform !== "win32" || (syncError as NodeJS.ErrnoException).code !== "EPERM") {
-          throw syncError;
-        }
-      }
-    } finally {
-      await directory.close();
+    await atomicWriteJson(file, state, MAX_EXPORT_STATE_BYTES, nodeAtomicTurnWriteOperations, (message, cause) => new OrgApiError(errorCodes.internal, 500, message, false, cause));
+  } catch (error) {
+    if (error instanceof ContextExportError) throw error;
+    if (error instanceof OrgApiError) {
+      throw new ContextExportError(error.message, error.cause);
     }
-  } catch {
-    await handle?.close().catch(() => undefined);
-    await fs.rm(temporary, { force: true }).catch(() => undefined);
-    throw new ContextExportError("context export state could not be persisted");
+    throw new ContextExportError("context export state could not be persisted", errnoCode(error));
   }
 }
 
@@ -453,7 +434,7 @@ async function readContextExportStateIfPresent(
     stat = await fs.lstat(file);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw new ContextExportError("context export state is unreadable");
+    throw new ContextExportError("context export state is unreadable", errnoCode(error));
   }
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_EXPORT_STATE_BYTES) {
     throw new ContextExportError("context export state is not a bounded regular file");

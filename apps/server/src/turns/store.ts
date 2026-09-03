@@ -12,6 +12,7 @@ import type { TurnEngine, TurnHistory, TurnRecord, WorkbenchSession } from "@org
 import type { EngineEvent, TurnTerminalReason } from "@org-workbench/shared";
 import { assertSessionId, readAuthoritativeSessionIndex } from "../sessions/store.js";
 import { StableReadError, decodeStableUtf8, readStableBoundedFile } from "../stable-read.js";
+import { syncDirectoryDurable } from "../durable-sync.js";
 
 const STATE_ROOT = path.join(".digital-employee", "workbench", "conversations");
 const SESSION_CONVERSATIONS_ROOT = path.join(
@@ -68,8 +69,13 @@ interface ConversationMetadata {
   createdAt: string;
 }
 
-function storageError(message: string): OrgApiError {
-  return new OrgApiError(errorCodes.turn_storage_failed, 500, message);
+function storageError(message: string, cause?: string): OrgApiError {
+  return new OrgApiError(errorCodes.turn_storage_failed, 500, message, false, cause);
+}
+
+function errnoCode(error: unknown): string | undefined {
+  const code = (error as NodeJS.ErrnoException)?.code;
+  return typeof code === "string" ? code : undefined;
 }
 
 export function assertPositionId(value: unknown): string {
@@ -170,12 +176,12 @@ export async function atomicWriteJson(
   value: unknown,
   maxBytes: number,
   operations: AtomicTurnWriteOperations,
-  makeStorageError: (message: string) => OrgApiError,
+  makeStorageError: (message: string, cause?: string) => OrgApiError,
 ): Promise<void> {
   const dir = path.dirname(file);
   const payload = `${JSON.stringify(value)}\n`;
   if (Buffer.byteLength(payload, "utf8") > maxBytes) {
-    throw makeStorageError("local state record exceeds its bounded size");
+    throw new Error("local state record exceeds its bounded size");
   }
   const temporary = path.join(dir, `.${path.basename(file)}.${crypto.randomUUID()}.tmp`);
   let fileHandle: AtomicTurnTemporaryHandle | undefined;
@@ -190,21 +196,7 @@ export async function atomicWriteJson(
     await operations.chmod(file, 0o600);
     directoryHandle = await operations.openDirectory(dir);
     try {
-      try {
-        await directoryHandle.sync();
-      } catch (error) {
-        // Windows/NTFS rejects fsync on directory handles with EPERM. On win32
-        // the rename() above has already committed the data atomically, so the
-        // record is durable and the EPERM is a false negative.
-        //
-        // Reduced durability guarantee (AC-004): swallowing the directory sync
-        // means the rename directory entry may not survive a subsequent power
-        // loss on Windows — POSIX callers lose the "renamed AND fsync-durable"
-        // guarantee. On POSIX, EPERM indicates a real failure and propagates.
-        if (process.platform !== "win32" || (error as NodeJS.ErrnoException).code !== "EPERM") {
-          throw error;
-        }
-      }
+      await syncDirectoryDurable(dir, directoryHandle);
     } finally {
       await directoryHandle.close();
     }
@@ -212,11 +204,6 @@ export async function atomicWriteJson(
   } catch (error) {
     try {
       await fileHandle?.close();
-    } catch {
-      // Preserve the first durability failure while still attempting cleanup.
-    }
-    try {
-      await directoryHandle?.close();
     } catch {
       // Preserve the first durability failure while still attempting cleanup.
     }
@@ -1242,8 +1229,8 @@ export class TurnStore {
         storageError,
       );
       return metadata;
-    } catch {
-      throw storageError("local session conversation metadata could not be persisted");
+    } catch (error) {
+      throw storageError("local session conversation metadata could not be persisted", errnoCode(error));
     }
   }
 
@@ -1282,8 +1269,8 @@ export class TurnStore {
         storageError,
       );
       return metadata;
-    } catch {
-      throw storageError("local conversation metadata could not be persisted");
+    } catch (error) {
+      throw storageError("local conversation metadata could not be persisted", errnoCode(error));
     }
   }
 
@@ -1297,8 +1284,8 @@ export class TurnStore {
         this.options.atomicWriteOperations ?? nodeAtomicTurnWriteOperations,
         storageError,
       );
-    } catch {
-      throw storageError("local turn record could not be persisted atomically");
+    } catch (error) {
+      throw storageError("local turn record could not be persisted atomically", errnoCode(error));
     }
   }
 
@@ -1316,8 +1303,8 @@ export class TurnStore {
         this.options.atomicWriteOperations ?? nodeAtomicTurnWriteOperations,
         storageError,
       );
-    } catch {
-      throw storageError("local session turn record could not be persisted atomically");
+    } catch (error) {
+      throw storageError("local session turn record could not be persisted atomically", errnoCode(error));
     }
   }
 

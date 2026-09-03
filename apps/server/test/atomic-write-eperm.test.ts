@@ -15,8 +15,8 @@ import {
   TurnStore,
 } from "../src/turns/store.js";
 
-function testStorageError(message: string): OrgApiError {
-  return new OrgApiError(errorCodes.turn_storage_failed, 500, message);
+function testStorageError(message: string, cause?: string): OrgApiError {
+  return new OrgApiError(errorCodes.turn_storage_failed, 500, message, false, cause);
 }
 
 function epermDirectoryOperations(): AtomicTurnWriteOperations {
@@ -98,27 +98,42 @@ test("atomicWriteJson still rejects on non-EPERM directory sync errors", async (
   }
 });
 
-test("TurnStore succeeds with EPERM directory sync via injected operations", { skip: process.platform !== "win32" ? "EPERM directory sync is only swallowed on Windows" : false }, async () => {
+test("TurnStore uses injected operations for directory sync (AC-003: no Windows runner required)", async () => {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "owb-turnstore-eperm-"));
   try {
     const store = new TurnStore({ atomicWriteOperations: epermDirectoryOperations() });
-    const record = await store.begin({
-      workspace,
-      positionId: "test-position",
-      turnId: "test-turn",
-      engine: "qoder",
-      message: "hello",
-      envelopeDigest: "sha256:" + "a".repeat(64),
-      now: "2026-01-01T00:00:00.000Z",
-    });
-    assert.equal(record.status, "running");
-    assert.equal(record.turnId, "test-turn");
-    const turnFile = path.join(
-      workspace, ".digital-employee", "workbench", "conversations",
-      "test-position", "turns", "test-turn.json",
-    );
-    const raw = JSON.parse(await fs.readFile(turnFile, "utf8"));
-    assert.equal(raw.turnId, "test-turn");
+    if (process.platform === "win32") {
+      const record = await store.begin({
+        workspace,
+        positionId: "test-position",
+        turnId: "test-turn",
+        engine: "qoder",
+        message: "hello",
+        envelopeDigest: "sha256:" + "a".repeat(64),
+        now: "2026-01-01T00:00:00.000Z",
+      });
+      assert.equal(record.status, "running");
+      assert.equal(record.turnId, "test-turn");
+      const turnFile = path.join(
+        workspace, ".digital-employee", "workbench", "conversations",
+        "test-position", "turns", "test-turn.json",
+      );
+      const raw = JSON.parse(await fs.readFile(turnFile, "utf8"));
+      assert.equal(raw.turnId, "test-turn");
+    } else {
+      await assert.rejects(
+        store.begin({
+          workspace,
+          positionId: "test-position",
+          turnId: "test-turn",
+          engine: "qoder",
+          message: "hello",
+          envelopeDigest: "sha256:" + "a".repeat(64),
+          now: "2026-01-01T00:00:00.000Z",
+        }),
+        (error: OrgApiError) => error instanceof OrgApiError && error.cause === "EPERM",
+      );
+    }
   } finally {
     await fs.rm(workspace, { recursive: true, force: true });
   }

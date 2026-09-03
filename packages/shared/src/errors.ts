@@ -99,22 +99,27 @@ export interface ErrorBody {
   code: string;
   message: string;
   retryable: boolean;
+  cause?: string;
 }
 
 export class OrgApiError extends Error {
   readonly code: string;
   readonly status: number;
   readonly retryable: boolean;
+  readonly cause?: string;
 
-  constructor(code: string, status: number, message: string, retryable = false) {
+  constructor(code: string, status: number, message: string, retryable = false, cause?: string) {
     super(message);
     this.name = "OrgApiError";
     this.code = code;
     this.status = status;
     this.retryable = retryable;
+    this.cause = cause;
   }
 
   toBody(): ErrorBody {
-    return { code: this.code, message: this.message, retryable: this.retryable };
+    const body: ErrorBody = { code: this.code, message: this.message, retryable: this.retryable };
+    if (this.cause !== undefined) body.cause = this.cause;
+    return body;
   }
 }

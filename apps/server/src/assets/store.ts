@@ -43,8 +43,13 @@ export interface AssetIndex {
   assets: AssetIndexEntry[];
 }
 
-function storageError(message: string): OrgApiError {
-  return new OrgApiError(errorCodes.docs_storage_failed, 500, message);
+function storageError(message: string, cause?: string): OrgApiError {
+  return new OrgApiError(errorCodes.docs_storage_failed, 500, message, false, cause);
+}
+
+function errnoCode(error: unknown): string | undefined {
+  const code = (error as NodeJS.ErrnoException)?.code;
+  return typeof code === "string" ? code : undefined;
 }
 
 function assetsRoot(workspace: string): string {
@@ -135,8 +140,7 @@ export async function writeAssetRecord(workspace: string, record: AssetRecord): 
       storageError,
     );
   } catch (error) {
-    if (error instanceof OrgApiError) throw error;
-    throw storageError("asset record could not be persisted atomically");
+    throw storageError("asset record could not be persisted atomically", errnoCode(error));
   }
 }
 
@@ -160,8 +164,7 @@ export async function appendAssetIndex(workspace: string, entry: AssetIndexEntry
       storageError,
     );
   } catch (error) {
-    if (error instanceof OrgApiError) throw error;
-    throw storageError("asset index could not be persisted atomically");
+    throw storageError("asset index could not be persisted atomically", errnoCode(error));
   }
 }
 
@@ -280,6 +283,6 @@ async function rebuildAssetIndex(workspace: string, records: AssetRecord[]): Pro
     );
   } catch (error) {
     if (error instanceof OrgApiError) throw error;
-    throw storageError("asset index could not be rebuilt atomically");
+    throw storageError("asset index could not be rebuilt atomically", errnoCode(error));
   }
 }
