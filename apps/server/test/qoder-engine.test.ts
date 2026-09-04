@@ -701,11 +701,12 @@ test("qoder-engine turn run: an unspawnable resolved binary never discloses its 
   assert.doesNotMatch(result.stdout, new RegExp(fakeBin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
-function fakeClaudeOk(argsFile: string, envFile: string, stdinFile: string): string {
+function fakeClaudeOk(argsFile: string, envFile: string, stdinFile: string, cwdFile?: string): string {
   return `#!/usr/bin/env node
 const fs = require("node:fs");
 fs.writeFileSync(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)));
 fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify(process.env));
+if (${JSON.stringify(cwdFile || "")}) fs.writeFileSync(${JSON.stringify(cwdFile || "")}, process.cwd());
 let stdinData = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => { stdinData += chunk; });
@@ -737,7 +738,8 @@ test("qoder-engine turn run: claude-code dispatches to Claude binary, never Qode
   const argsFile = path.join(fakeDir, "claude-args.json");
   const envFile = path.join(fakeDir, "claude-env.json");
   const stdinFile = path.join(fakeDir, "claude-stdin.txt");
-  const fakeClaude = await writeFakeClaude(fakeDir, fakeClaudeOk(argsFile, envFile, stdinFile));
+  const cwdFile = path.join(fakeDir, "claude-cwd.txt");
+  const fakeClaude = await writeFakeClaude(fakeDir, fakeClaudeOk(argsFile, envFile, stdinFile, cwdFile));
 
   const qoderStub = path.join(fakeDir, "qoder-stub.cjs");
   await fs.writeFile(qoderStub, "#!/usr/bin/env node\nprocess.stderr.write(\"QODER_SHOULD_NOT_BE_CALLED\\n\");process.exit(1);\n");
@@ -792,6 +794,38 @@ test("qoder-engine turn run: claude-code dispatches to Claude binary, never Qode
 
   const stdinContent = await fs.readFile(stdinFile, "utf8");
   assert.ok(stdinContent.includes("hello from test"), "input is piped to Claude stdin");
+
+  const expectedPrefix = `[Position: repo-owner]\n[Workspace: ${dir}]\n\n`;
+  assert.ok(stdinContent.startsWith(expectedPrefix), `stdin must start with position/workspace prefix, got: ${JSON.stringify(stdinContent.slice(0, 120))}`);
+
+  const claudeCwd = await fs.readFile(cwdFile, "utf8");
+  assert.equal(claudeCwd, dir, "claude-code spawn must use workspace as cwd");
+});
+
+test("qoder-engine turn run: claude-code prefix reflects dynamic positionId, not hardcoded", { skip: process.platform === "win32" ? "requires POSIX exec of a shebang fixture" : false }, async () => {
+  const dir = await makeWorkspace();
+  const fakeDir = await fs.mkdtemp(path.join(os.tmpdir(), "owb-claude-prefix-"));
+  const argsFile = path.join(fakeDir, "claude-args.json");
+  const envFile = path.join(fakeDir, "claude-env.json");
+  const stdinFile = path.join(fakeDir, "claude-stdin.txt");
+  const cwdFile = path.join(fakeDir, "claude-cwd.txt");
+  const fakeClaude = await writeFakeClaude(fakeDir, fakeClaudeOk(argsFile, envFile, stdinFile, cwdFile));
+
+  const result = await runAdapter(["turn", "run", dir, "--position", "docs-writer", "--stdin"], {
+    stdin: JSON.stringify({ input: "test prefix" }),
+    env: {
+      DIGITAL_EMPLOYEE_ENGINE_MODEL: "claude-code",
+      DIGITAL_EMPLOYEE_CLAUDE_COMMAND: fakeClaude,
+      ANTHROPIC_API_KEY: "test-key",
+      PATH: `${fakeDir}${path.delimiter}${process.env.PATH ?? ""}`,
+    },
+  });
+  assert.equal(result.code, 0);
+  const stdinContent = await fs.readFile(stdinFile, "utf8");
+  const expectedPrefix = `[Position: docs-writer]\n[Workspace: ${dir}]\n\n`;
+  assert.ok(stdinContent.startsWith(expectedPrefix), `prefix must reflect positionId docs-writer, got: ${JSON.stringify(stdinContent.slice(0, 120))}`);
+  const wrongPrefix = `[Position: repo-owner]`;
+  assert.ok(!stdinContent.startsWith(wrongPrefix), "prefix must not match a different positionId");
 });
 
 test("qoder-engine turn run: claude-local dispatches to Claude without service credentials", { skip: process.platform === "win32" ? "requires POSIX exec of a shebang fixture" : false }, async () => {
@@ -800,7 +834,8 @@ test("qoder-engine turn run: claude-local dispatches to Claude without service c
   const argsFile = path.join(fakeDir, "claude-args.json");
   const envFile = path.join(fakeDir, "claude-env.json");
   const stdinFile = path.join(fakeDir, "claude-stdin.txt");
-  const fakeClaude = await writeFakeClaude(fakeDir, fakeClaudeOk(argsFile, envFile, stdinFile));
+  const cwdFile = path.join(fakeDir, "claude-cwd.txt");
+  const fakeClaude = await writeFakeClaude(fakeDir, fakeClaudeOk(argsFile, envFile, stdinFile, cwdFile));
 
   const result = await runAdapter(["turn", "run", dir, "--position", "repo-owner", "--stdin"], {
     stdin: JSON.stringify({ input: "local test" }),
@@ -822,6 +857,12 @@ test("qoder-engine turn run: claude-local dispatches to Claude without service c
   assert.equal(claudeEnv.ANTHROPIC_BASE_URL, undefined, "claude-local must not receive ANTHROPIC_BASE_URL");
   assert.equal(claudeEnv.QODER_PERSONAL_ACCESS_TOKEN, undefined, "claude-local must not receive Qoder credentials");
   assert.equal(claudeEnv.DIGITAL_EMPLOYEE_CLAUDE_COMMAND, fakeClaude, "claude-local receives the binary override");
+
+  const stdinContent = await fs.readFile(stdinFile, "utf8");
+  const expectedPrefix = `[Position: repo-owner]\n[Workspace: ${dir}]\n\n`;
+  assert.ok(stdinContent.startsWith(expectedPrefix), "claude-local stdin must carry Position/Workspace prefix");
+  const claudeCwd = await fs.readFile(cwdFile, "utf8");
+  assert.equal(claudeCwd, dir, "claude-local spawn must use workspace as cwd");
 });
 
 test("qoder-engine turn run: claude-code fails closed when Claude binary is missing", async () => {

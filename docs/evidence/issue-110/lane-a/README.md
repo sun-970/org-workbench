@@ -263,13 +263,13 @@ Sanitized current-main verifier output:
 Sanitized current-main Lane A static smoke output:
 
 ```json
-{"schemaVersion":"org-workbench-clean-staging-smoke.v1","ok":true,"platform":"macos","architecture":"arm64","artifact":"release/staging/mac-arm64/Org Workbench.app","stagedOutsideSourceTree":true,"stagedPathHasSpaces":true,"controlPlaneReady":true,"trackedWorkbenchPid":true,"trackedControlPlanePid":true,"externalCredentialsForwarded":false,"liveDescendants":4,"qoderDescendantsObservedAfterReport":0,"knownResidualProcesses":0,"rendererEntryObserved":true,"staticSmokeEntry":true,"stagingCleaned":true}
+{"schemaVersion":"org-workbench-clean-staging-smoke.v1","ok":true,"platform":"macos","architecture":"arm64","artifact":"release/staging/mac-arm64/Org Workbench.app","stagedOutsideSourceTree":true,"stagedPathHasSpaces":true,"controlPlaneReady":true,"trackedWorkbenchPid":true,"trackedControlPlanePid":true,"externalCredentialsForwarded":false,"liveDescendants":4,"engineDescendantsObservedAfterReport":0,"knownResidualProcesses":0,"rendererEntryObserved":true,"staticSmokeEntry":true,"stagingCleaned":true}
 ```
 
 Sanitized current-main #111/#119 behavior qualification output:
 
 ```json
-{"schemaVersion":"org-workbench-clean-staging-behavior-smoke.v1","ok":true,"platform":"macos","architecture":"arm64","artifact":"release/staging/mac-arm64/Org Workbench.app","stagedOutsideSourceTree":true,"stagedPathHasSpaces":true,"controlPlaneReady":true,"trackedWorkbenchPid":true,"trackedControlPlanePid":true,"externalCredentialsForwarded":false,"liveDescendants":4,"qoderDescendantsObservedAfterReport":0,"knownResidualProcesses":0,"rendererMounted":true,"preloadBridge":true,"loginPathRecovered":true,"nestedMcpResolvedViaRecoveredPath":true,"loginShellEnvironmentImported":false,"qoderReady":true,"turnCompleted":true,"historyReadback":true,"sessionHistoryReadback":true,"stagingCleaned":true}
+{"schemaVersion":"org-workbench-clean-staging-behavior-smoke.v1","ok":true,"platform":"macos","architecture":"arm64","artifact":"release/staging/mac-arm64/Org Workbench.app","stagedOutsideSourceTree":true,"stagedPathHasSpaces":true,"controlPlaneReady":true,"trackedWorkbenchPid":true,"trackedControlPlanePid":true,"externalCredentialsForwarded":false,"liveDescendants":4,"engineDescendantsObservedAfterReport":0,"knownResidualProcesses":0,"rendererMounted":true,"preloadBridge":true,"loginPathRecovered":true,"nestedMcpResolvedViaRecoveredPath":true,"loginShellEnvironmentImported":false,"qoderReady":true,"turnCompleted":true,"historyReadback":true,"sessionHistoryReadback":true,"stagingCleaned":true}
 ```
 
 The process claim is deliberately bounded to verified/bound identities, the current verified root and descendants, and on POSIX the expected detached group while its spawn-origin generation remains unambiguous. Command text and staging paths are diagnostic data only: they never grant signal authority and never support an “owned residual” conclusion. PID and command-line values are not evidence and are not retained.

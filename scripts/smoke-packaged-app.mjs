@@ -523,9 +523,9 @@ export async function smokePackagedApp(platform, candidate, options = {}) {
       0,
       "staged app reported no descendants while still held open",
     );
-    const liveQoderDescendants = liveDescendants.filter(({ command }) => /qoder(?:-engine|cli)?|claude/i.test(command));
+    const liveEngineDescendants = liveDescendants.filter(({ command }) => /qoder(?:-engine|cli)?|claude/i.test(command));
     assert.equal(
-      liveQoderDescendants.length,
+      liveEngineDescendants.length,
       0,
       `${mode} smoke left a Qoder/Claude/Host child alive after reporting`,
     );
@@ -551,7 +551,7 @@ export async function smokePackagedApp(platform, candidate, options = {}) {
       trackedControlPlanePid: true,
       externalCredentialsForwarded: false,
       liveDescendants: liveDescendants.length,
-      qoderDescendantsObservedAfterReport: liveQoderDescendants.length,
+      engineDescendantsObservedAfterReport: liveEngineDescendants.length,
       knownResidualProcesses: 0,
     };
     completedReport = mode === "static"

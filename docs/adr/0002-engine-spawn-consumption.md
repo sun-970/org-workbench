@@ -19,6 +19,10 @@ spawn+stdout 结构化事件与 agent-host.v1 进程模型/NDJSON 事件流同�
 
 引擎首版未发布前，开发期允许以 `ORG_WORKBENCH_DIGITAL_EMPLOYEE_CLI` 指向本地构建入口；CI 与正式包只认精确钉版。`/health` 必须报告 CLI 可用性与版本，不可用时给出下一步。
 
+## 多引擎派发（#153 决定）
+
+控制面在 `turn run` 分支按 `DIGITAL_EMPLOYEE_ENGINE_MODEL` 环境变量派发到不同引擎。Plan A（已落地）：单一钉版入口 `qoder-engine.mjs` 根据环境变量分派——`qoder` 走 Qoder CLI，`claude-code` 走 Claude Code CLI（带服务凭据），`claude-local` 走 Claude Code CLI（仅本地，无服务凭据）。`org apply` 与 `hire validate` 保持引擎无关，仅 `turn run` 分支。各引擎凭据正 allowlist 隔离：claude-code 子进程不接收 Qoder 凭据，claude-local 子进程不接收任何服务凭据。版本窗口：Claude Code >= 2.1.214, < 2.2.0。
+
 ## 后果
 
 - CLI 缺少 `org apply` 时驱动层如实返回 `engine_capability_missing`（503）；可用时严格按 JSON `status` 判断，不以退出码 0 冒充 applied。
