@@ -140,6 +140,7 @@ export async function writeAssetRecord(workspace: string, record: AssetRecord): 
       storageError,
     );
   } catch (error) {
+    if (error instanceof OrgApiError) throw error;
     throw storageError("asset record could not be persisted atomically", errnoCode(error));
   }
 }
@@ -164,6 +165,7 @@ export async function appendAssetIndex(workspace: string, entry: AssetIndexEntry
       storageError,
     );
   } catch (error) {
+    if (error instanceof OrgApiError) throw error;
     throw storageError("asset index could not be persisted atomically", errnoCode(error));
   }
 }

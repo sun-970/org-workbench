@@ -453,6 +453,7 @@ export class SessionStore {
     try {
       await atomicWriteJson(positionFile(workspace, positionId), state, MAX_POSITION_RECORD_BYTES, nodeAtomicTurnWriteOperations, sessionError);
     } catch (error) {
+      if (error instanceof OrgApiError) throw error;
       throw sessionError("local session record could not be persisted atomically", errnoCode(error));
     }
     return session;
@@ -532,6 +533,7 @@ export class SessionStore {
       try {
         await atomicWriteJson(positionFile(workspace, source.positionId), state, MAX_POSITION_RECORD_BYTES, nodeAtomicTurnWriteOperations, sessionError);
       } catch (error) {
+        if (error instanceof OrgApiError) throw error;
         throw sessionError("local session record could not be persisted atomically", errnoCode(error));
       }
       return { session: successor, created: true };
@@ -581,6 +583,7 @@ export class SessionStore {
       try {
         await atomicWriteJson(file, record, MAX_WORKSPACE_RECORD_BYTES, nodeAtomicTurnWriteOperations, sessionError);
       } catch (error) {
+        if (error instanceof OrgApiError) throw error;
         throw sessionError("local session workspace identity could not be persisted atomically", errnoCode(error));
       }
       return record;

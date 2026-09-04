@@ -190,6 +190,7 @@ export class GroupStore {
         storageError,
       );
     } catch (error) {
+      if (error instanceof OrgApiError) throw error;
       throw storageError("local group record could not be persisted atomically", errnoCode(error));
     }
     return group;
@@ -272,6 +273,7 @@ export class GroupStore {
         storageError,
       );
     } catch (error) {
+      if (error instanceof OrgApiError) throw error;
       throw storageError("local group record could not be persisted atomically", errnoCode(error));
     }
     return updated;
@@ -295,6 +297,7 @@ export class GroupStore {
         storageError,
       );
     } catch (error) {
+      if (error instanceof OrgApiError) throw error;
       throw storageError("local group message could not be persisted atomically", errnoCode(error));
     }
     return record;

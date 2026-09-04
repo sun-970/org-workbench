@@ -18,14 +18,18 @@ interface SyncableHandle {
  * (e.g. atomicWriteJson) can pass their own directory handle. When omitted,
  * opens the directory directly via fs.
  */
-export async function syncDirectoryDurable(dir: string, existing?: SyncableHandle): Promise<void> {
+export async function syncDirectoryDurable(
+  dir: string,
+  existing?: SyncableHandle,
+  platform: NodeJS.Platform = process.platform,
+): Promise<void> {
   const own = existing === undefined;
   const directory = own ? await fs.open(dir, "r") : existing;
   try {
     try {
       await directory.sync();
     } catch (error) {
-      if (process.platform !== "win32" || (error as NodeJS.ErrnoException).code !== "EPERM") {
+      if (platform !== "win32" || (error as NodeJS.ErrnoException).code !== "EPERM") {
         throw error;
       }
       console.error("[ac-005] directory fsync EPERM swallowed on win32", { dir, code: "EPERM" });

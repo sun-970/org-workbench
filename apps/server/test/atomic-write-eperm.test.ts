@@ -45,12 +45,12 @@ function epermDirectoryOperations(): AtomicTurnWriteOperations {
   };
 }
 
-test("atomicWriteJson succeeds when directory sync rejects with EPERM (#155)", { skip: process.platform !== "win32" ? "EPERM directory sync is only swallowed on Windows" : false }, async () => {
+test("atomicWriteJson swallows EPERM on simulated win32 (#155)", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "owb-eperm-test-"));
   try {
     const file = path.join(dir, "record.json");
     const operations = epermDirectoryOperations();
-    await atomicWriteJson(file, { hello: "world" }, 4096, operations, testStorageError);
+    await atomicWriteJson(file, { hello: "world" }, 4096, operations, testStorageError, "win32");
     const raw = JSON.parse(await fs.readFile(file, "utf8"));
     assert.deepEqual(raw, { hello: "world" });
   } finally {
@@ -58,13 +58,13 @@ test("atomicWriteJson succeeds when directory sync rejects with EPERM (#155)", {
   }
 });
 
-test("atomicWriteJson propagates EPERM on non-Windows platforms", { skip: process.platform === "win32" ? "EPERM is only swallowed on Windows" : false }, async () => {
+test("atomicWriteJson propagates EPERM on simulated POSIX", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "owb-eperm-posix-"));
   try {
     const file = path.join(dir, "record.json");
     const operations = epermDirectoryOperations();
     await assert.rejects(
-      atomicWriteJson(file, { hello: "world" }, 4096, operations, testStorageError),
+      atomicWriteJson(file, { hello: "world" }, 4096, operations, testStorageError, "linux"),
       (error: NodeJS.ErrnoException) => error.code === "EPERM",
     );
   } finally {
@@ -98,12 +98,44 @@ test("atomicWriteJson still rejects on non-EPERM directory sync errors", async (
   }
 });
 
-test("TurnStore uses injected operations for directory sync (AC-003: no Windows runner required)", async () => {
+test("TurnStore swallows EPERM via injected platform win32 (AC-003)", async () => {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "owb-turnstore-eperm-"));
   try {
-    const store = new TurnStore({ atomicWriteOperations: epermDirectoryOperations() });
-    if (process.platform === "win32") {
-      const record = await store.begin({
+    const store = new TurnStore({
+      atomicWriteOperations: epermDirectoryOperations(),
+      platform: "win32",
+    });
+    const record = await store.begin({
+      workspace,
+      positionId: "test-position",
+      turnId: "test-turn",
+      engine: "qoder",
+      message: "hello",
+      envelopeDigest: "sha256:" + "a".repeat(64),
+      now: "2026-01-01T00:00:00.000Z",
+    });
+    assert.equal(record.status, "running");
+    assert.equal(record.turnId, "test-turn");
+    const turnFile = path.join(
+      workspace, ".digital-employee", "workbench", "conversations",
+      "test-position", "turns", "test-turn.json",
+    );
+    const raw = JSON.parse(await fs.readFile(turnFile, "utf8"));
+    assert.equal(raw.turnId, "test-turn");
+  } finally {
+    await fs.rm(workspace, { recursive: true, force: true });
+  }
+});
+
+test("TurnStore propagates EPERM via injected platform linux (AC-003)", async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "owb-turnstore-eperm-posix-"));
+  try {
+    const store = new TurnStore({
+      atomicWriteOperations: epermDirectoryOperations(),
+      platform: "linux",
+    });
+    await assert.rejects(
+      store.begin({
         workspace,
         positionId: "test-position",
         turnId: "test-turn",
@@ -111,29 +143,9 @@ test("TurnStore uses injected operations for directory sync (AC-003: no Windows 
         message: "hello",
         envelopeDigest: "sha256:" + "a".repeat(64),
         now: "2026-01-01T00:00:00.000Z",
-      });
-      assert.equal(record.status, "running");
-      assert.equal(record.turnId, "test-turn");
-      const turnFile = path.join(
-        workspace, ".digital-employee", "workbench", "conversations",
-        "test-position", "turns", "test-turn.json",
-      );
-      const raw = JSON.parse(await fs.readFile(turnFile, "utf8"));
-      assert.equal(raw.turnId, "test-turn");
-    } else {
-      await assert.rejects(
-        store.begin({
-          workspace,
-          positionId: "test-position",
-          turnId: "test-turn",
-          engine: "qoder",
-          message: "hello",
-          envelopeDigest: "sha256:" + "a".repeat(64),
-          now: "2026-01-01T00:00:00.000Z",
-        }),
-        (error: OrgApiError) => error instanceof OrgApiError && error.cause === "EPERM",
-      );
-    }
+      }),
+      (error: OrgApiError) => error instanceof OrgApiError && error.cause === "EPERM",
+    );
   } finally {
     await fs.rm(workspace, { recursive: true, force: true });
   }

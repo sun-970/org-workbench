@@ -177,6 +177,7 @@ export async function atomicWriteJson(
   maxBytes: number,
   operations: AtomicTurnWriteOperations,
   makeStorageError: (message: string, cause?: string) => OrgApiError,
+  platform: NodeJS.Platform = process.platform,
 ): Promise<void> {
   const dir = path.dirname(file);
   const payload = `${JSON.stringify(value)}\n`;
@@ -196,7 +197,7 @@ export async function atomicWriteJson(
     await operations.chmod(file, 0o600);
     directoryHandle = await operations.openDirectory(dir);
     try {
-      await syncDirectoryDurable(dir, directoryHandle);
+      await syncDirectoryDurable(dir, directoryHandle, platform);
     } finally {
       await directoryHandle.close();
     }
@@ -741,6 +742,7 @@ export class TurnStore {
   constructor(
     private readonly options: {
       atomicWriteOperations?: AtomicTurnWriteOperations;
+      platform?: NodeJS.Platform;
     } = {},
   ) {}
 
@@ -1227,9 +1229,11 @@ export class TurnStore {
         MAX_METADATA_BYTES,
         this.options.atomicWriteOperations ?? nodeAtomicTurnWriteOperations,
         storageError,
+        this.options.platform,
       );
       return metadata;
     } catch (error) {
+      if (error instanceof OrgApiError) throw error;
       throw storageError("local session conversation metadata could not be persisted", errnoCode(error));
     }
   }
@@ -1267,9 +1271,11 @@ export class TurnStore {
         MAX_METADATA_BYTES,
         this.options.atomicWriteOperations ?? nodeAtomicTurnWriteOperations,
         storageError,
+        this.options.platform,
       );
       return metadata;
     } catch (error) {
+      if (error instanceof OrgApiError) throw error;
       throw storageError("local conversation metadata could not be persisted", errnoCode(error));
     }
   }
@@ -1283,8 +1289,10 @@ export class TurnStore {
         MAX_TURN_RECORD_BYTES,
         this.options.atomicWriteOperations ?? nodeAtomicTurnWriteOperations,
         storageError,
+        this.options.platform,
       );
     } catch (error) {
+      if (error instanceof OrgApiError) throw error;
       throw storageError("local turn record could not be persisted atomically", errnoCode(error));
     }
   }
@@ -1302,8 +1310,10 @@ export class TurnStore {
         MAX_TURN_RECORD_BYTES,
         this.options.atomicWriteOperations ?? nodeAtomicTurnWriteOperations,
         storageError,
+        this.options.platform,
       );
     } catch (error) {
+      if (error instanceof OrgApiError) throw error;
       throw storageError("local session turn record could not be persisted atomically", errnoCode(error));
     }
   }
