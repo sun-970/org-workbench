@@ -28,6 +28,7 @@ module.exports = {
   // Lane A is deterministic unsigned staging even when an operator shell has
   // CSC_LINK/WIN_CSC_LINK. Keep PE metadata editing, but never enter signing.
   win: {
+    icon: "apps/desktop/renderer/src/assets/qoder.ico",
     signExecutable: false,
   },
   // No publish provider here, deliberately. A provider makes electron-builder
