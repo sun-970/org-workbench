@@ -20,6 +20,7 @@ module.exports = {
   // space, and a space in an artifact filename has already cost this lane one
   // round of Windows shell defects.
   artifactName: "${name}-${version}-${arch}.${ext}",
+  icon: "apps/desktop/renderer/src/assets/qoder.png",
   mac: {
     category: "public.app-category.developer-tools",
     identity: null,

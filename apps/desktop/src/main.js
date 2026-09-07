@@ -713,6 +713,7 @@ function createWindow() {
     // an AC-002 "no raw hex in components" violation (there is no component
     // here, just Electron's own pre-paint).
     backgroundColor: "#f4f1e8",
+    icon: path.join(__dirname, "..", "renderer", "src", "assets", "qoder.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
